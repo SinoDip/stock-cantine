@@ -443,8 +443,7 @@ export default function StockApp() {
                 <p className="lead">De stock kon niet geladen worden.</p>
               </div>
               <div className="empty">
-                {loadError} Controleer of de Supabase-gegevens kloppen in de instellingen van je project, en of je
-                schema.sql (of update-1.sql) hebt uitgevoerd.
+                {loadError}
               </div>
               <button className="btn" onClick={() => refresh()}>
                 Opnieuw proberen

@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ALLERGENS } from "./stock";
+import { ConfigError } from "./supabase";
 import type { Batch, BatchInput, LogAction, LogEntry, Product, ProductInput, Supplier, SupplierInput } from "./types";
 
 /* ---------- rijen uit de database → app-objecten ---------- */
@@ -278,7 +279,27 @@ export function fail(err: unknown) {
   if (e?.code === "23505") return NextResponse.json({ error: "Deze naam bestaat al." }, { status: 409 });
   if (e?.code === "23503") return NextResponse.json({ error: "Dit product of deze leverancier bestaat niet meer." }, { status: 409 });
   console.error(err);
-  return NextResponse.json({ error: "Er ging iets mis op de server. Probeer opnieuw." }, { status: 500 });
+  return NextResponse.json({ error: explain(err) }, { status: 500 });
+}
+
+/** Zet een databasefout om in een uitleg die je zelf kunt oplossen. */
+function explain(err: unknown): string {
+  if (err instanceof ConfigError) return err.message;
+  const e = (err ?? {}) as { code?: string; message?: string; details?: string; hint?: string };
+  const msg = `${e.message ?? ""} ${e.details ?? ""}`.trim();
+  const tech = msg ? ` (technisch: ${msg.slice(0, 200)})` : "";
+  const m = msg.toLowerCase();
+  if (m.includes("invalid api key") || m.includes("jwt") || m.includes("unauthorized") || e.code === "PGRST301" || e.code === "401")
+    return `De Supabase-sleutel klopt niet. Kopieer de secret key opnieuw uit Supabase (Project Settings → API Keys) naar SUPABASE_SERVICE_ROLE_KEY in Vercel en klik op Redeploy.${tech}`;
+  if (m.includes("fetch failed") || m.includes("enotfound") || m.includes("getaddrinfo") || m.includes("network"))
+    return `Supabase is niet bereikbaar. Klopt SUPABASE_URL in Vercel (bv. https://abcdefgh.supabase.co)? Staat je Supabase-project niet op pauze?${tech}`;
+  if (e.code === "42P01" || e.code === "PGRST205" || m.includes("could not find the table") || (m.includes("relation") && m.includes("does not exist")))
+    return `Een tabel ontbreekt in de database. Voer supabase/schema.sql uit in de SQL Editor van Supabase.${tech}`;
+  if (e.code === "42703" || e.code === "PGRST204" || m.includes("column") || m.includes("schema cache"))
+    return `Een kolom ontbreekt in de database. Voer supabase/update-1.sql uit in de SQL Editor van Supabase.${tech}`;
+  if (e.code === "42883" || e.code === "PGRST202" || m.includes("function"))
+    return `Een databasefunctie ontbreekt. Voer supabase/schema.sql opnieuw uit in de SQL Editor van Supabase.${tech}`;
+  return `Er ging iets mis op de server.${tech}`;
 }
 
 export async function readJson(req: Request): Promise<Record<string, unknown>> {
