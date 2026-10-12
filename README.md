@@ -12,7 +12,7 @@ Een eenvoudige stock-app voor de keuken. Het hele team logt in met één gedeeld
 - **Supabase** (Postgres) als database
 - **Vercel** om het online te zetten
 
-De stock van 6 oktober 2026 zit al in `supabase/seed.sql`.
+De stock van 12 oktober 2026 (uit de Google Sheet) zit al in `supabase/seed.sql`.
 
 ---
 
@@ -26,7 +26,7 @@ De stock van 6 oktober 2026 zit al in `supabase/seed.sql`.
 4. Open links **SQL Editor** → **New query**.
 5. Open het bestand `supabase/schema.sql` uit deze map, kopieer alles, plak het in de editor en klik op **Run**. Je ziet "Success".
 6. Doe hetzelfde met `supabase/seed.sql`. Daarmee komt je huidige stock erin.
-7. Controleer via **Table Editor**: de tabel `products` heeft 62 rijen.
+7. Controleer via **Table Editor**: de tabel `products` heeft 61 rijen.
 
 > **Had je `schema.sql` al uitgevoerd vóór de leveranciers, allergenen en het logboek erbij kwamen?** Voer dan alleen `supabase/update-1.sql` uit (SQL Editor → New query → Run). Je stock blijft gewoon staan.
 
@@ -131,4 +131,3 @@ Pas je iets aan en zet je het op GitHub, dan zet Vercel de nieuwe versie vanzelf
 | Inloggen lukt, maar je komt telkens terug op de loginpagina | `AUTH_SECRET` ontbreekt of is korter dan 32 tekens. |
 | "Dit product bestaat al" | Er is al een product met die naam (hoofdletters tellen niet mee). |
 | Supabase-project staat op pauze | Gratis projecten pauzeren na een week zonder gebruik. Open het project in Supabase en klik **Restore**. Bij dagelijks gebruik gebeurt dit niet. |
-# stock-cantine
