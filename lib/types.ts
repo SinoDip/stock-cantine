@@ -1,3 +1,6 @@
+/** Kant van de zaak met een eigen stock. */
+export type Area = "keuken" | "front";
+
 export type Product = {
   id: string;
   name: string;
@@ -11,6 +14,8 @@ export type Product = {
   /** Aankoopprijs per eenheid, in euro. */
   price: number | null;
   allergens: string[];
+  /** In welke kant(en) dit product gebruikt wordt; minstens één. */
+  areas: Area[];
 };
 
 /** Eén levering (of één prep-batch) van een product. */
@@ -19,6 +24,7 @@ export type Batch = {
   productId: string;
   qty: number;
   remaining: number;
+  area: Area;
   received: string; // YYYY-MM-DD
   expires: string | null; // YYYY-MM-DD
   note: string | null;
@@ -82,6 +88,7 @@ export type SupplierInput = Omit<Supplier, "id">;
 
 export type BatchInput = {
   productId: string;
+  area: Area;
   qty: number;
   received: string;
   expires: string | null;

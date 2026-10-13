@@ -1,4 +1,4 @@
-import type { Batch, Product, Settings } from "./types";
+import type { Area, Batch, Product, Settings } from "./types";
 
 /** Vaste volgorde van de categorieën. Voeg hier gerust een categorie toe. */
 export const CATEGORIES = [
@@ -12,6 +12,13 @@ export const CATEGORIES = [
 ];
 
 export const LOCATIONS = ["Koelcel", "Diepvries", "Droge stock", "Bar"];
+
+export const AREAS: Area[] = ["keuken", "front"];
+export const AREA_LABEL: Record<Area, string> = { keuken: "Keuken", front: "Front" };
+
+export function isArea(v: unknown): v is Area {
+  return v === "keuken" || v === "front";
+}
 
 /** De 14 allergenen die je volgens de Europese regels moet melden. */
 export const ALLERGENS = [

@@ -35,6 +35,7 @@ button,input,select{font:inherit;color:inherit}
 /* header + tabs */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--bg);border-bottom:1px solid var(--line)}
 .bar{max-width:920px;margin:0 auto;padding-inline:16px;display:flex;align-items:center;gap:12px;min-height:60px}
+.logo{flex:none;display:block;width:40px;height:40px}
 .brand{display:flex;flex-direction:column;line-height:1;margin-right:auto;min-width:0}
 .brand b{font:800 22px/1 var(--f-display);font-stretch:68%;letter-spacing:.04em;text-transform:uppercase}
 .brand span{font-size:13px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -132,6 +133,14 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:650;font-size:14px;cursor:pointer;white-space:nowrap}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .group-title{display:flex;justify-content:space-between;margin:22px 2px 8px}
+
+/* Keuken | Front */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin-bottom:12px;background:var(--sunk);border-radius:14px}
+.seg button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border:0;border-radius:11px;background:none;
+  color:var(--muted);font:800 18px/1 var(--f-display);font-stretch:80%;letter-spacing:.03em;text-transform:uppercase;cursor:pointer}
+.seg button span{font:700 13px/1 var(--f-body);letter-spacing:0;opacity:.7}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.pill.area{background:var(--sunk);color:var(--ink)}
 
 /* forms */
 .form{display:flex;flex-direction:column;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}

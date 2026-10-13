@@ -35,6 +35,7 @@ export default function LoginPage() {
     <main className="center">
       <form className="card" onSubmit={submit} noValidate>
         <div>
+          <img src="/logo.svg" alt="Cantine" width={72} height={72} style={{ display: "block", marginBottom: 12 }} />
           <h1 className="h1">Stocklijst</h1>
           <p className="lead">Cantine · log in met het teamwachtwoord</p>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { ALLERGENS, CATEGORIES, LOCATIONS } from "@/lib/stock";
-import type { Product, ProductInput, Supplier } from "@/lib/types";
+import { ALLERGENS, AREAS, AREA_LABEL, CATEGORIES, LOCATIONS } from "@/lib/stock";
+import type { Area, Product, ProductInput, Supplier } from "@/lib/types";
 
 /** Formulierwaarden als tekst, zodat lege velden leeg kunnen blijven. */
 export type ProductForm = {
@@ -14,9 +14,10 @@ export type ProductForm = {
   supplierId: string;
   price: string;
   allergens: string[];
+  areas: Area[];
 };
 
-export function emptyForm(): ProductForm {
+export function emptyForm(area: Area = "keuken"): ProductForm {
   return {
     category: "Overige",
     unit: "stuks",
@@ -27,6 +28,7 @@ export function emptyForm(): ProductForm {
     supplierId: "",
     price: "",
     allergens: [],
+    areas: [area],
   };
 }
 
@@ -41,6 +43,7 @@ export function formFrom(p: Product): ProductForm {
     supplierId: p.supplierId ?? "",
     price: p.price == null ? "" : String(p.price),
     allergens: p.allergens ?? [],
+    areas: p.areas,
   };
 }
 
@@ -63,6 +66,7 @@ export function toInput(name: string, f: ProductForm): ProductInput {
     supplierId: f.supplierId || null,
     price: num(f.price),
     allergens: f.allergens,
+    areas: f.areas,
   };
 }
 
@@ -83,9 +87,28 @@ export default function ProductFields({
   const cats = [...new Set([...CATEGORIES, ...extraCategories, value.category].filter(Boolean))];
   const toggleAllergen = (a: string, on: boolean) =>
     set("allergens", on ? [...new Set([...value.allergens, a])] : value.allergens.filter((x) => x !== a));
+  const toggleArea = (a: Area, on: boolean) =>
+    set("areas", AREAS.filter((x) => (x === a ? on : value.areas.includes(x))));
 
   return (
     <>
+      <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+        <legend style={{ fontSize: 14, fontWeight: 650, marginBottom: 6 }}>Gebruikt in</legend>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          {AREAS.map((a) => (
+            <label className="check" key={a}>
+              <input
+                type="checkbox"
+                id={`${idPrefix}-area-${a}`}
+                checked={value.areas.includes(a)}
+                onChange={(e) => toggleArea(a, e.target.checked)}
+              />
+              {AREA_LABEL[a]}
+            </label>
+          ))}
+        </div>
+        <small>Het product staat alleen op de stocklijst van de kant(en) die je aanvinkt.</small>
+      </fieldset>
       <div className="grid2 wrap1">
         <label className="field">
           <span>Categorie</span>

@@ -2,7 +2,7 @@
 
 import { useStock } from "./StockApp";
 import { ExpTag, MinusButton, Qty, Row, SectionHead } from "./ui";
-import { daysBetween, fifo, fmtDate, fmtDuration, fmtNum, isoWeekday, longDate, minutesUntil, needsOrder, todayISO } from "@/lib/stock";
+import { AREA_LABEL, daysBetween, fifo, fmtDate, fmtDuration, fmtNum, isoWeekday, longDate, minutesUntil, needsOrder, todayISO } from "@/lib/stock";
 import type { Batch } from "@/lib/types";
 
 export default function Today() {
@@ -33,6 +33,7 @@ export default function Today() {
         <div className="row-main">
           <div className="name">{p.name}</div>
           <div className="meta">
+            <span className="pill area">{AREA_LABEL[b.area]}</span>
             <ExpTag b={b} warnDays={w} />
           </div>
         </div>
@@ -170,6 +171,7 @@ export default function Today() {
                   <div className="row-main">
                     <div className="name">{p.name}</div>
                     <div className="meta">
+                      <span className="pill area">{AREA_LABEL[b.area]}</span>
                       <span>Geprept op {fmtDate(b.received)}</span>
                       {!p.shelfDays && <span className="pill plain">Houdbaarheid niet ingesteld</span>}
                     </div>
@@ -203,7 +205,7 @@ function useToday() {
     const p = s.productMap.get(b.productId);
     const before = { ...b };
     s.adjust(b, -1);
-    s.toast(`${p?.name ?? "Product"}: −1`, "Ongedaan", () => s.restore(before));
+    s.toast(`${p?.name ?? "Product"} (${AREA_LABEL[b.area]}): −1`, "Ongedaan", () => s.restore(before));
   };
   return { ...s, consumeBatch };
 }

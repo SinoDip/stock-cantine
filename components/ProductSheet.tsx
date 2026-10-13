@@ -4,15 +4,16 @@ import { useState, type FormEvent } from "react";
 import { useStock } from "./StockApp";
 import ProductFields, { emptyForm, formFrom, toInput, type ProductForm } from "./ProductFields";
 import { ConfirmButton, ExpTag, SectionHead, Sheet } from "./ui";
-import { fmtDate, fmtMoney, fmtNum, norm } from "@/lib/stock";
+import { AREAS, AREA_LABEL, fmtDate, fmtMoney, fmtNum, norm } from "@/lib/stock";
+import type { Area } from "@/lib/types";
 
-export default function ProductSheet({ pid }: { pid: string | null }) {
+export default function ProductSheet({ pid, newArea }: { pid: string | null; newArea?: Area }) {
   const { productMap, products, suppliers, supplierMap, infoOf, data, closeSheet, adjust, setExpiry, saveProduct, deleteProduct, goTab, toast, openSupplier } =
     useStock();
   const p = pid ? productMap.get(pid) : undefined;
 
   const [name, setName] = useState(p?.name ?? "");
-  const [form, setForm] = useState<ProductForm>(p ? formFrom(p) : emptyForm());
+  const [form, setForm] = useState<ProductForm>(p ? formFrom(p) : emptyForm(newArea));
   const [editOpen, setEditOpen] = useState(!p);
   const [busy, setBusy] = useState(false);
 
@@ -31,6 +32,12 @@ export default function ProductSheet({ pid }: { pid: string | null }) {
     if (!nm) return toast("Geef het product een naam.");
     const dup = products.find((x) => norm(x.name) === norm(nm) && x.id !== pid);
     if (dup) return toast(`“${dup.name}” bestaat al.`);
+    if (!form.areas.length) return toast("Kies Keuken, Front of allebei.");
+    if (p) {
+      const dropped = AREAS.find((a) => !form.areas.includes(a) && infoOf(p, a).total > 0);
+      if (dropped)
+        return toast(`Er staat nog ${fmtNum(infoOf(p, dropped).total)} ${p.unit} in ${AREA_LABEL[dropped]}. Haal die eerst weg.`);
+    }
     setBusy(true);
     const saved = await saveProduct(pid, toInput(nm, form));
     setBusy(false);
@@ -78,8 +85,10 @@ export default function ProductSheet({ pid }: { pid: string | null }) {
   }
 
   const i = infoOf(p);
+  const split =
+    p.areas.length > 1 ? ` (${p.areas.map((a) => `${fmtNum(infoOf(p, a).total)} ${AREA_LABEL[a].toLowerCase()}`).join(", ")})` : "";
   const sub =
-    `${fmtNum(i.total)} ${p.unit} op stock` +
+    `${fmtNum(i.total)} ${p.unit} op stock${split}` +
     (p.min != null ? ` · minimum ${fmtNum(p.min)}` : " · geen minimum") +
     (p.prep && p.shelfDays ? ` · prep ${p.shelfDays} d houdbaar` : "") +
     (p.price != null ? ` · ${fmtMoney(p.price)} per ${p.unit}` : "");
@@ -114,6 +123,7 @@ export default function ProductSheet({ pid }: { pid: string | null }) {
               <div className="batch" key={b.id}>
                 <div className="bmain">
                   <div className="meta" style={{ marginTop: 0 }}>
+                    <span className="pill area">{AREA_LABEL[b.area]}</span>
                     {b.expires ? <ExpTag b={b} warnDays={data.settings.warnDays} /> : <span className="pill plain">Geen vervaldatum</span>}
                   </div>
                   <div className="bmeta">

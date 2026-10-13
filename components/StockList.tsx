@@ -4,18 +4,20 @@ import { useState } from "react";
 import { useStock } from "./StockApp";
 import { ExpTag, MinusButton, Qty, Row } from "./ui";
 import { Icon } from "./Icons";
-import { byCategory, fmtMoney, needsOrder, norm } from "@/lib/stock";
+import { AREAS, AREA_LABEL, byCategory, fmtMoney, needsOrder, norm } from "@/lib/stock";
 import type { Product } from "@/lib/types";
 
 export default function StockList() {
-  const { products, infoOf, data, consumeOne, openProduct } = useStock();
+  const { products: allProducts, infoOf, data, consumeOne, openProduct, area, setArea } = useStock();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("Alles");
 
+  // Alleen de producten van deze kant; de aantallen tellen alleen de stock van deze kant.
+  const products = allProducts.filter((p) => p.areas.includes(area));
   const cats = [...new Set(products.map((p) => p.category || "Overige"))].sort(byCategory);
   const lowCount = products.filter((p) => needsOrder(p, infoOf(p))).length;
   const priced = products.filter((p) => p.price != null);
-  const stockValue = priced.reduce((s, p) => s + (p.price ?? 0) * infoOf(p).total, 0);
+  const stockValue = priced.reduce((s, p) => s + (p.price ?? 0) * infoOf(p, area).total, 0);
 
   const nq = norm(q.trim());
   let list = products.filter((p) => !nq || norm(p.name).includes(nq));
@@ -37,6 +39,21 @@ export default function StockList() {
 
   return (
     <>
+      <div className="seg" role="group" aria-label="Kant">
+        {AREAS.map((a) => (
+          <button
+            key={a}
+            aria-pressed={area === a}
+            onClick={() => {
+              setArea(a);
+              setCat("Alles");
+            }}
+          >
+            {AREA_LABEL[a]}
+            <span className="num">{allProducts.filter((p) => p.areas.includes(a)).length}</span>
+          </button>
+        ))}
+      </div>
       <div className="search">
         <Icon name="search" />
         <input
@@ -71,7 +88,7 @@ export default function StockList() {
               Geen product gevonden voor “{q}”. Voeg het toe via <b>Inboeken</b>.
             </>
           ) : (
-            "Nog geen producten in deze lijst."
+            `Nog geen producten in ${AREA_LABEL[area]}. Vink ${AREA_LABEL[area]} aan bij een product, of voeg er een toe.`
           )}
         </div>
       ) : (
@@ -83,16 +100,17 @@ export default function StockList() {
             </div>
             <div className="list">
               {groups.get(c)!.map((p) => {
-                const i = infoOf(p);
+                const i = infoOf(p, area);
+                const toOrder = needsOrder(p, infoOf(p));
                 return (
                   <Row key={p.id} onOpen={() => openProduct(p.id)}>
                     <div className="row-main">
                       <div className="name">{p.name}</div>
-                      {(i.next || i.low !== "ok" || p.prep || p.location) && (
+                      {(i.next || i.low === "op" || toOrder || p.prep || p.location) && (
                         <div className="meta">
                           {i.next && <ExpTag b={i.next} warnDays={data.settings.warnDays} />}
                           {i.low === "op" && <span className="pill bad">Op</span>}
-                          {i.low === "laag" && <span className="pill low">Bijbestellen</span>}
+                          {i.low !== "op" && toOrder && <span className="pill low">Bijbestellen</span>}
                           {p.prep && <span className="pill plain">Prep</span>}
                           {p.location && <span>{p.location}</span>}
                         </div>
@@ -100,7 +118,7 @@ export default function StockList() {
                     </div>
                     <div className="row-side">
                       <Qty n={i.total} unit={p.unit} />
-                      <MinusButton label={`Eén ${p.name} gebruikt`} disabled={i.total <= 0} onClick={() => consumeOne(p.id)} />
+                      <MinusButton label={`Eén ${p.name} gebruikt`} disabled={i.total <= 0} onClick={() => consumeOne(p.id, area)} />
                     </div>
                   </Row>
                 );
@@ -111,8 +129,8 @@ export default function StockList() {
       )}
 
       <div style={{ marginTop: 20 }}>
-        <button className="btn block" onClick={() => openProduct(null)}>
-          Nieuw product toevoegen
+        <button className="btn block" onClick={() => openProduct(null, area)}>
+          Nieuw product voor {AREA_LABEL[area]}
         </button>
       </div>
     </>

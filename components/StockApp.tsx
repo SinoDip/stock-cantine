@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { Batch, BatchInput, Product, ProductInput, Settings, StockData, Supplier, SupplierInput } from "@/lib/types";
-import { byName, groupBatches, needsOrder, productInfo, todayISO, daysBetween, type ProductInfo } from "@/lib/stock";
+import type { Area, Batch, BatchInput, Product, ProductInput, Settings, StockData, Supplier, SupplierInput } from "@/lib/types";
+import { AREA_LABEL, byName, groupBatches, isArea, needsOrder, productInfo, todayISO, daysBetween, type ProductInfo } from "@/lib/stock";
 import { Icon, type IconName } from "./Icons";
 import Today from "./Today";
 import StockList from "./StockList";
@@ -17,7 +17,7 @@ import NamePrompt from "./NamePrompt";
 export type Tab = "vandaag" | "stock" | "inboeken" | "bestellen" | "meer";
 export type TabOptions = { pid?: string; supplierId?: string; view?: MeerView };
 type SheetState =
-  | { kind: "product"; pid: string | null }
+  | { kind: "product"; pid: string | null; area?: Area }
   | { kind: "supplier"; id: string | null }
   | { kind: "settings" }
   | null;
@@ -29,16 +29,20 @@ type Ctx = {
   productMap: Map<string, Product>;
   suppliers: Supplier[];
   supplierMap: Map<string, Supplier>;
-  infoOf: (p: Product) => ProductInfo;
+  /** Zonder kant: Keuken en Front samen. */
+  infoOf: (p: Product, area?: Area) => ProductInfo;
   me: string;
   setMe: (name: string) => void;
+  /** De kant die dit toestel laatst koos op de stockpagina. */
+  area: Area;
+  setArea: (a: Area) => void;
   goTab: (t: Tab, opts?: TabOptions) => void;
-  openProduct: (pid: string | null) => void;
+  openProduct: (pid: string | null, area?: Area) => void;
   openSupplier: (id: string | null) => void;
   openSettings: () => void;
   closeSheet: () => void;
   toast: (msg: string, actionLabel?: string, action?: () => void) => void;
-  consumeOne: (pid: string) => void;
+  consumeOne: (pid: string, area: Area) => void;
   adjust: (b: Batch, delta: number) => void;
   restore: (b: Batch) => void;
   discard: (b: Batch) => void;
@@ -62,6 +66,7 @@ export function useStock(): Ctx {
 
 const EMPTY: StockData = { products: [], batches: [], suppliers: [], settings: { warnDays: 3 } };
 const NAME_KEY = "stocklijst.naam";
+const AREA_KEY = "stocklijst.kant";
 
 class ApiError extends Error {}
 
@@ -98,6 +103,7 @@ export default function StockApp() {
   const [toastState, setToast] = useState<ToastState>(null);
   const [me, setMeState] = useState("");
   const [nameChecked, setNameChecked] = useState(false);
+  const [area, setAreaState] = useState<Area>("keuken");
 
   // Bijhouden van lopende wijzigingen, zodat een trage refresh een snelle tik niet overschrijft.
   const pending = useRef(0);
@@ -145,6 +151,21 @@ export default function StockApp() {
     currentUser = stored;
     setMeState(stored);
     setNameChecked(true);
+    try {
+      const a = localStorage.getItem(AREA_KEY);
+      if (isArea(a)) setAreaState(a);
+    } catch {
+      /* geen opslag beschikbaar */
+    }
+  }, []);
+
+  const setArea = useCallback((a: Area) => {
+    setAreaState(a);
+    try {
+      localStorage.setItem(AREA_KEY, a);
+    } catch {
+      /* negeren */
+    }
   }, []);
 
   const setMe = useCallback((name: string) => {
@@ -165,11 +186,13 @@ export default function StockApp() {
   const supplierMap = useMemo(() => new Map(data.suppliers.map((s) => [s.id, s])), [data.suppliers]);
   const infoCache = useMemo(() => new Map<string, ProductInfo>(), [byProduct, data.settings, data.products]);
   const infoOf = useCallback(
-    (p: Product) => {
-      let i = infoCache.get(p.id);
+    (p: Product, area?: Area) => {
+      const key = area ? `${p.id}|${area}` : p.id;
+      let i = infoCache.get(key);
       if (!i) {
-        i = productInfo(p, byProduct.get(p.id) ?? [], data.settings);
-        infoCache.set(p.id, i);
+        const all = byProduct.get(p.id) ?? [];
+        i = productInfo(p, area ? all.filter((b) => b.area === area) : all, data.settings);
+        infoCache.set(key, i);
       }
       return i;
     },
@@ -221,18 +244,19 @@ export default function StockApp() {
   );
 
   const consumeOne = useCallback(
-    (pid: string) => {
+    (pid: string, area: Area) => {
       const p = productMap.get(pid);
-      const first = (byProduct.get(pid) ?? [])[0];
+      const list = (byProduct.get(pid) ?? []).filter((b) => b.area === area);
+      const first = list[0];
       if (!p || !first) return;
-      const rest = (byProduct.get(pid) ?? []).reduce((s, b) => s + b.remaining, 0) - Math.min(1, first.remaining);
+      const rest = list.reduce((s, b) => s + b.remaining, 0) - Math.min(1, first.remaining);
       mutate(
         (d) => setBatchRemaining(d, first.id, Math.max(0, first.remaining - 1)),
-        () => api<{ before: Batch | null }>("/api/use", "POST", { productId: pid }),
+        () => api<{ before: Batch | null }>("/api/use", "POST", { productId: pid, area }),
       ).then((r) => {
         if (r?.before) {
           const before = r.before;
-          toast(`${p.name}: nog ${Math.max(0, Math.round(rest * 100) / 100)} ${p.unit}`, "Ongedaan", () => restore(before));
+          toast(`${p.name}: nog ${Math.max(0, Math.round(rest * 100) / 100)} ${p.unit} in ${AREA_LABEL[area]}`, "Ongedaan", () => restore(before));
         }
       });
     },
@@ -359,7 +383,7 @@ export default function StockApp() {
     setTabKey((k) => k + 1);
     window.scrollTo(0, 0);
   }, []);
-  const openProduct = useCallback((pid: string | null) => setSheet({ kind: "product", pid }), []);
+  const openProduct = useCallback((pid: string | null, area?: Area) => setSheet({ kind: "product", pid, area }), []);
   const openSupplier = useCallback((id: string | null) => setSheet({ kind: "supplier", id }), []);
   const openSettings = useCallback(() => setSheet({ kind: "settings" }), []);
   const closeSheet = useCallback(() => setSheet(null), []);
@@ -373,6 +397,8 @@ export default function StockApp() {
     infoOf,
     me,
     setMe,
+    area,
+    setArea,
     goTab,
     openProduct,
     openSupplier,
@@ -412,6 +438,7 @@ export default function StockApp() {
     <StockContext.Provider value={ctx}>
       <header className="top">
         <div className="bar">
+          <img className="logo" src="/logo.svg" alt="" width={40} height={40} />
           <div className="brand">
             <b>Stocklijst</b>
             <span suppressHydrationWarning>
@@ -465,7 +492,7 @@ export default function StockApp() {
         )}
       </main>
 
-      {sheet?.kind === "product" && <ProductSheet key={sheet.pid ?? "nieuw"} pid={sheet.pid} />}
+      {sheet?.kind === "product" && <ProductSheet key={sheet.pid ?? "nieuw"} pid={sheet.pid} newArea={sheet.area} />}
       {sheet?.kind === "supplier" && <SupplierSheet key={sheet.id ?? "nieuw"} id={sheet.id} />}
       {sheet?.kind === "settings" && <SettingsSheet />}
       {nameChecked && !me && <NamePrompt />}

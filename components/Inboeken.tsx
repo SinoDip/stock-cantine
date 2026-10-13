@@ -4,17 +4,22 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useStock } from "./StockApp";
 import ProductFields, { emptyForm, toInput, type ProductForm } from "./ProductFields";
 import { ExpTag, Qty, Row, SectionHead } from "./ui";
-import { addDays, fmtDate, fmtNum, localISO, norm, todayISO } from "@/lib/stock";
+import { AREAS, AREA_LABEL, addDays, fmtDate, fmtNum, localISO, norm, todayISO } from "@/lib/stock";
+import type { Area, Product } from "@/lib/types";
 
 const QUICK_DAYS = [1, 2, 3, 5, 7, 14];
 
 export default function Inboeken({ initialPid }: { initialPid: string | null }) {
-  const { products, productMap, suppliers, data, addBatch, saveProduct, removeBatch, toast, openProduct } = useStock();
+  const { products, productMap, suppliers, data, addBatch, saveProduct, removeBatch, toast, openProduct, area: lastArea } = useStock();
+
+  /** Kant voor de levering: vast als het product maar in één kant staat. */
+  const areaFor = (p: Product | undefined, fallback: Area): Area => (p && !p.areas.includes(fallback) ? p.areas[0] : fallback);
 
   const [pid, setPid] = useState<string | null>(initialPid && productMap.has(initialPid) ? initialPid : null);
+  const [area, setArea] = useState<Area>(() => areaFor(initialPid ? productMap.get(initialPid) : undefined, lastArea));
   const [query, setQuery] = useState("");
   const [isNew, setIsNew] = useState(false);
-  const [newForm, setNewForm] = useState<ProductForm>(emptyForm());
+  const [newForm, setNewForm] = useState<ProductForm>(emptyForm(lastArea));
   const [qty, setQty] = useState("1");
   const [received, setReceived] = useState(todayISO());
   const [expires, setExpires] = useState(() => {
@@ -41,6 +46,7 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
     setPid(id);
     setIsNew(false);
     setQuery("");
+    setArea(areaFor(p, area));
     setExpires(p?.prep && p.shelfDays ? addDays(received || todayISO(), p.shelfDays) : "");
   }
 
@@ -80,18 +86,20 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
       if (!id) {
         const nm = query.trim();
         if (!nm) return toast("Geef het nieuwe product een naam.");
-        const created = await saveProduct(null, toInput(nm, newForm));
+        const input = toInput(nm, newForm);
+        if (!input.areas.includes(area)) input.areas = AREAS.filter((a) => a === area || input.areas.includes(a));
+        const created = await saveProduct(null, input);
         if (!created) return;
         id = created.id;
         unit = created.unit;
         name = created.name;
       }
-      const b = await addBatch({ productId: id, qty: n, received: received || todayISO(), expires: expires || null, note: note.trim() || null });
+      const b = await addBatch({ productId: id, area, qty: n, received: received || todayISO(), expires: expires || null, note: note.trim() || null });
       if (!b) return;
-      toast(`Ingeboekt: ${fmtNum(n)} ${unit} ${name}`, "Ongedaan", () => removeBatch(b.id));
+      toast(`Ingeboekt in ${AREA_LABEL[area]}: ${fmtNum(n)} ${unit} ${name}`, "Ongedaan", () => removeBatch(b.id));
       setQty("1");
       setNote("");
-      setNewForm(emptyForm());
+      setNewForm(emptyForm(area));
       clearPick();
     } finally {
       setBusy(false);
@@ -172,6 +180,26 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
             </>
           )}
         </div>
+
+        {(product || isNew) && (
+          <div className="field">
+            <span>Naar</span>
+            {product && product.areas.length === 1 ? (
+              <div className="picked">
+                <b>{AREA_LABEL[area]}</b>
+                <small style={{ color: "var(--muted)" }}>{product.name} staat alleen in {AREA_LABEL[area]}</small>
+              </div>
+            ) : (
+              <div className="seg" role="group" aria-label="Naar" style={{ marginBottom: 0 }}>
+                {AREAS.map((a) => (
+                  <button type="button" key={a} aria-pressed={area === a} onClick={() => setArea(a)}>
+                    {AREA_LABEL[a]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {isNew && !product && (
           <div className="newbox">
@@ -264,6 +292,7 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
                         {time}
                         {b.createdBy ? ` · door ${b.createdBy}` : ""}
                       </span>
+                      <span className="pill area">{AREA_LABEL[b.area]}</span>
                       <ExpTag b={b} warnDays={data.settings.warnDays} />
                     </div>
                   </div>

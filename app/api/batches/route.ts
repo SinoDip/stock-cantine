@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { AREA_LABEL } from "@/lib/stock";
 import { BATCH_COLS, fail, logActivity, ok, parseBatch, productName, readJson, toBatch } from "@/lib/server";
 
 /** Nieuwe levering of prep inboeken. */
@@ -10,6 +11,7 @@ export async function POST(req: Request) {
       .from("batches")
       .insert({
         product_id: b.productId,
+        area: b.area,
         qty: b.qty,
         remaining: b.qty,
         received: b.received,
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
       productId: b.productId,
       productName: await productName(db, b.productId),
       qty: b.qty,
-      detail: b.expires ? `houdbaar tot ${b.expires}` : null,
+      detail: AREA_LABEL[b.area] + (b.expires ? ` · houdbaar tot ${b.expires}` : ""),
     });
     return ok(toBatch(data), 201);
   } catch (e) {

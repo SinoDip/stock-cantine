@@ -30,6 +30,8 @@ De stock van 12 oktober 2026 (uit de Google Sheet) zit al in `supabase/seed.sql`
 
 > **Had je `schema.sql` al uitgevoerd vóór de leveranciers, allergenen en het logboek erbij kwamen?** Voer dan alleen `supabase/update-1.sql` uit (SQL Editor → New query → Run). Je stock blijft gewoon staan.
 
+> **Had je de app al vóór Keuken en Front er waren?** Voer dan ook `supabase/update-2.sql` één keer uit, *vóór* je de nieuwe versie deployt. Producten met locatie "Bar" gaan naar Front, al de rest naar Keuken. Je stock blijft staan.
+
 Nu heb je twee waarden nodig voor stap 3:
 
 - **Project URL**: via **Project Settings → Data API** (of de knop **Connect** bovenaan). Ziet eruit als `https://abcdefgh.supabase.co`.
@@ -112,7 +114,8 @@ Pas je iets aan en zet je het op GitHub, dan zet Vercel de nieuwe versie vanzelf
 
 - De browser praat alleen met de eigen API-routes in `app/api/…`. Die praten met Supabase via de geheime sleutel, die dus nooit in de browser komt.
 - `middleware.ts` controleert bij elke aanvraag of je ingelogd bent; zo niet, ga je naar `/login`.
-- **−1** gebeurt in één databasefunctie (`use_one` in `schema.sql`) die altijd aftrekt van de levering die het eerst vervalt. Twee mensen die tegelijk tikken, botsen dus niet.
+- **Keuken en Front** hebben elk hun eigen stock. Een product staat in één kant of in allebei (aanvinken bij het product); elke levering hoort bij één kant. De Stock-pagina toont één kant tegelijk, Vandaag en Bestellen tonen alles samen. Het minimum geldt voor Keuken + Front samen.
+- **−1** gebeurt in één databasefunctie (`use_one` in `schema.sql`) die altijd aftrekt van de levering die het eerst vervalt, in de kant waar je op tikt. Twee mensen die tegelijk tikken, botsen dus niet.
 - Een levering die op 0 komt, wordt verwijderd. Elke wijziging heeft een knop **Ongedaan** in de melding onderaan.
 - De app ververst elke 15 seconden en telkens je ze terug opent, zodat je ziet wat collega's deden.
 - Elke wijziging komt in het logboek (tabel `activity_log`) met de naam die op dat toestel is ingevuld. Het logboek toont de laatste 400 acties. Wil je oude regels opkuisen, dan kan dat in de SQL Editor met:
@@ -125,7 +128,7 @@ Pas je iets aan en zet je het op GitHub, dan zet Vercel de nieuwe versie vanzelf
 
 | Wat je ziet | Oplossing |
 |---|---|
-| "De stock kon niet geladen worden" | `SUPABASE_URL` of `SUPABASE_SERVICE_ROLE_KEY` klopt niet, of `schema.sql` (of `update-1.sql`) is niet uitgevoerd. Pas aan in Vercel en klik **Redeploy**. |
+| "De stock kon niet geladen worden" | `SUPABASE_URL` of `SUPABASE_SERVICE_ROLE_KEY` klopt niet, of `schema.sql` (of `update-1.sql` / `update-2.sql`) is niet uitgevoerd. Pas aan in Vercel en klik **Redeploy**. |
 | Logboek laadt niet of blijft leeg | `update-1.sql` is nog niet uitgevoerd in Supabase. |
 | "TEAM_PASSWORD is niet ingesteld" | Voeg `TEAM_PASSWORD` toe in Vercel en klik **Redeploy**. |
 | Inloggen lukt, maar je komt telkens terug op de loginpagina | `AUTH_SECRET` ontbreekt of is korter dan 32 tekens. |

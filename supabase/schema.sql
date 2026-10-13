@@ -79,9 +79,32 @@ create table if not exists public.activity_log (
 create index if not exists activity_log_created_idx on public.activity_log (created_at desc);
 alter table public.activity_log enable row level security;
 
--- Eén stuk gebruiken: trekt af van de levering die het eerst vervalt (dan de oudste).
--- Geeft de levering terug zoals ze was vóór de wijziging. Op 0 wordt de levering verwijderd.
-create or replace function public.use_one(p_product text, p_amount numeric default 1)
+-- Keuken en Front: per product in welke kant(en), per levering in welke kant.
+alter table public.products add column if not exists areas text[];
+update public.products
+   set areas = case when location = 'Bar' then array['front'] else array['keuken'] end
+ where areas is null;
+alter table public.products alter column areas set default array['keuken'];
+alter table public.products alter column areas set not null;
+alter table public.products drop constraint if exists products_areas_check;
+alter table public.products add constraint products_areas_check
+  check (cardinality(areas) >= 1 and areas <@ array['keuken', 'front']);
+
+alter table public.batches add column if not exists area text;
+update public.batches b
+   set area = case when p.location = 'Bar' then 'front' else 'keuken' end
+  from public.products p
+ where p.id = b.product_id and b.area is null;
+update public.batches set area = 'keuken' where area is null;
+alter table public.batches alter column area set default 'keuken';
+alter table public.batches alter column area set not null;
+alter table public.batches drop constraint if exists batches_area_check;
+alter table public.batches add constraint batches_area_check check (area in ('keuken', 'front'));
+
+-- Eén stuk gebruiken: trekt af van de levering die het eerst vervalt (dan de oudste), in de gevraagde kant
+-- (p_area null = maakt niet uit). Geeft de levering terug zoals ze was vóór de wijziging. Op 0 wordt de levering verwijderd.
+drop function if exists public.use_one(text, numeric);
+create or replace function public.use_one(p_product text, p_amount numeric default 1, p_area text default null)
 returns json
 language plpgsql
 security definer
@@ -92,7 +115,7 @@ declare
 begin
   select * into b
   from public.batches
-  where product_id = p_product and remaining > 0
+  where product_id = p_product and remaining > 0 and (p_area is null or area = p_area)
   order by expires asc nulls last, received asc, created_at asc
   limit 1
   for update;
@@ -141,7 +164,7 @@ end;
 $$;
 
 -- Alleen de server mag deze functies aanroepen.
-revoke execute on function public.use_one(text, numeric) from public, anon, authenticated;
+revoke execute on function public.use_one(text, numeric, text) from public, anon, authenticated;
 revoke execute on function public.adjust_batch(text, numeric) from public, anon, authenticated;
-grant execute on function public.use_one(text, numeric) to service_role;
+grant execute on function public.use_one(text, numeric, text) to service_role;
 grant execute on function public.adjust_batch(text, numeric) to service_role;

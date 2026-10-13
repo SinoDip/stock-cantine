@@ -1,13 +1,14 @@
 import { supabase } from "@/lib/supabase";
+import { AREA_LABEL, isArea } from "@/lib/stock";
 import { BATCH_COLS, InputError, fail, logActivity, ok, optDate, optNum, productName, readJson, toBatch } from "@/lib/server";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 async function batchInfo(db: ReturnType<typeof supabase>, id: string) {
-  const { data } = await db.from("batches").select("product_id,remaining").eq("id", id).maybeSingle();
-  const row = data as { product_id: string; remaining: number | string } | null;
+  const { data } = await db.from("batches").select("product_id,remaining,area").eq("id", id).maybeSingle();
+  const row = data as { product_id: string; remaining: number | string; area: string | null } | null;
   if (!row) return null;
-  return { productId: row.product_id, remaining: Number(row.remaining), name: await productName(db, row.product_id) };
+  return { productId: row.product_id, remaining: Number(row.remaining), area: isArea(row.area) ? row.area : "keuken", name: await productName(db, row.product_id) };
 }
 
 /**
@@ -32,6 +33,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
           productId: batch.productId,
           productName: await productName(db, batch.productId),
           qty: delta,
+          detail: AREA_LABEL[batch.area],
         });
       }
       return ok({ batch });
@@ -45,7 +47,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
         action: "expiry",
         productId: batch.productId,
         productName: await productName(db, batch.productId),
-        detail: expires ? `nieuwe vervaldatum ${expires}` : "vervaldatum gewist",
+        detail: `${AREA_LABEL[batch.area]} · ${expires ? `nieuwe vervaldatum ${expires}` : "vervaldatum gewist"}`,
       });
       return ok({ batch });
     }
@@ -69,6 +71,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       .upsert({
         id,
         product_id: b.productId,
+        area: isArea(b.area) ? b.area : "keuken",
         qty,
         remaining,
         received: optDate(b.received) ?? new Date().toISOString().slice(0, 10),
@@ -85,7 +88,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       productId: b.productId,
       productName: await productName(db, b.productId),
       qty: remaining,
-      detail: "ongedaan gemaakt",
+      detail: `${AREA_LABEL[isArea(b.area) ? b.area : "keuken"]} · ongedaan gemaakt`,
     });
     return ok({ batch: toBatch(data) });
   } catch (e) {
@@ -108,6 +111,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
         productId: info.productId,
         productName: info.name,
         qty: info.remaining,
+        detail: AREA_LABEL[info.area],
       });
     }
     return ok({ ok: true });

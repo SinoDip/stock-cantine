@@ -1,9 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ALLERGENS } from "./stock";
+import { ALLERGENS, AREAS, isArea } from "./stock";
 import { ConfigError } from "./supabase";
-import type { Batch, BatchInput, LogAction, LogEntry, Product, ProductInput, Supplier, SupplierInput } from "./types";
+import type { Area, Batch, BatchInput, LogAction, LogEntry, Product, ProductInput, Supplier, SupplierInput } from "./types";
 
 /* ---------- rijen uit de database → app-objecten ---------- */
 
@@ -19,6 +19,7 @@ type ProductRow = {
   supplier_id: string | null;
   price: number | string | null;
   allergens: string[] | null;
+  areas: string[] | null;
 };
 
 type BatchRow = {
@@ -26,6 +27,7 @@ type BatchRow = {
   product_id: string;
   qty: number | string;
   remaining: number | string;
+  area: string | null;
   received: string;
   expires: string | null;
   note: string | null;
@@ -57,10 +59,15 @@ type LogRow = {
   detail: string | null;
 };
 
-export const PRODUCT_COLS = "id,name,category,unit,min,location,prep,shelf_days,supplier_id,price,allergens";
-export const BATCH_COLS = "id,product_id,qty,remaining,received,expires,note,created_by,created_at";
+export const PRODUCT_COLS = "id,name,category,unit,min,location,prep,shelf_days,supplier_id,price,allergens,areas";
+export const BATCH_COLS = "id,product_id,qty,remaining,area,received,expires,note,created_by,created_at";
 export const SUPPLIER_COLS = "id,name,contact,phone,email,customer_number,order_days,order_deadline,delivery_days,notes";
 export const LOG_COLS = "id,created_at,who,action,product_id,product_name,qty,detail";
+
+function toAreas(v: unknown): Area[] {
+  const list = Array.isArray(v) ? AREAS.filter((a) => v.includes(a)) : [];
+  return list.length ? list : ["keuken"];
+}
 
 export function toProduct(r: ProductRow): Product {
   return {
@@ -75,6 +82,7 @@ export function toProduct(r: ProductRow): Product {
     supplierId: r.supplier_id ?? null,
     price: r.price == null ? null : Number(r.price),
     allergens: r.allergens ?? [],
+    areas: toAreas(r.areas),
   };
 }
 
@@ -84,6 +92,7 @@ export function toBatch(r: BatchRow): Batch {
     productId: r.product_id,
     qty: Number(r.qty),
     remaining: Number(r.remaining),
+    area: isArea(r.area) ? r.area : "keuken",
     received: r.received,
     expires: r.expires,
     note: r.note,
@@ -165,7 +174,19 @@ export function parseProduct(body: Record<string, unknown>): ProductInput {
     supplierId: optStr(body.supplierId, 80),
     price: optNum(body.price),
     allergens: [...new Set(allergens)],
+    areas: parseAreas(body.areas),
   };
+}
+
+function parseAreas(v: unknown): Area[] {
+  const list = Array.isArray(v) ? AREAS.filter((a) => v.includes(a)) : [];
+  if (!list.length) throw new InputError("Kies Keuken, Front of allebei.");
+  return list;
+}
+
+export function parseArea(v: unknown): Area {
+  if (!isArea(v)) throw new InputError("Kies Keuken of Front.");
+  return v;
 }
 
 export function productRow(p: ProductInput) {
@@ -180,6 +201,7 @@ export function productRow(p: ProductInput) {
     supplier_id: p.supplierId,
     price: p.price,
     allergens: p.allergens,
+    areas: p.areas,
   };
 }
 
@@ -218,6 +240,7 @@ export function parseBatch(body: Record<string, unknown>): BatchInput {
   if (!qty || qty <= 0) throw new InputError("Vul een aantal groter dan 0 in.");
   return {
     productId: str(body.productId, "Product", 80),
+    area: parseArea(body.area),
     qty,
     received: optDate(body.received) ?? new Date().toISOString().slice(0, 10),
     expires: optDate(body.expires),
@@ -296,9 +319,9 @@ function explain(err: unknown): string {
   if (e.code === "42P01" || e.code === "PGRST205" || m.includes("could not find the table") || (m.includes("relation") && m.includes("does not exist")))
     return `Een tabel ontbreekt in de database. Voer supabase/schema.sql uit in de SQL Editor van Supabase.${tech}`;
   if (e.code === "42703" || e.code === "PGRST204" || m.includes("column") || m.includes("schema cache"))
-    return `Een kolom ontbreekt in de database. Voer supabase/update-1.sql uit in de SQL Editor van Supabase.${tech}`;
+    return `Een kolom ontbreekt in de database. Voer supabase/update-1.sql en supabase/update-2.sql uit in de SQL Editor van Supabase.${tech}`;
   if (e.code === "42883" || e.code === "PGRST202" || m.includes("function"))
-    return `Een databasefunctie ontbreekt. Voer supabase/schema.sql opnieuw uit in de SQL Editor van Supabase.${tech}`;
+    return `Een databasefunctie ontbreekt. Voer supabase/update-2.sql uit in de SQL Editor van Supabase.${tech}`;
   return `Er ging iets mis op de server.${tech}`;
 }
 
