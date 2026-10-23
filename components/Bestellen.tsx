@@ -2,23 +2,24 @@
 
 import { useRef, useState } from "react";
 import { useStock } from "./StockApp";
-import { SectionHead } from "./ui";
+import { Row, SectionHead } from "./ui";
 import { Icon } from "./Icons";
-import { byCategory, fmtMoney, fmtNum, longDate, needsOrder, norm, suggestOrder } from "@/lib/stock";
-import type { Product } from "@/lib/types";
+import { byCategory, expectedDelivery, fmtDate, fmtMoney, fmtNum, longDate, norm, suggestOrder, todayISO } from "@/lib/stock";
+import type { Order, Product } from "@/lib/types";
 
 const NONE = "__geen";
 
 export default function Bestellen({ initialSupplier }: { initialSupplier: string | null }) {
-  const { products, suppliers, supplierMap, infoOf, toast } = useStock();
+  const { products, productMap, suppliers, supplierMap, infoOf, shouldOrder, data, placeOrder, cancelOrder, goTab, toast } = useStock();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [off, setOff] = useState<Set<string>>(new Set());
   const [extra, setExtra] = useState<Set<string>>(new Set());
   const [addValue, setAddValue] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string>(initialSupplier && supplierMap.has(initialSupplier) ? initialSupplier : "");
+  const [busy, setBusy] = useState(false);
   const previewRef = useRef<HTMLPreElement>(null);
 
-  const ids = new Set([...products.filter((p) => needsOrder(p, infoOf(p))).map((p) => p.id), ...extra]);
+  const ids = new Set([...products.filter(shouldOrder).map((p) => p.id), ...extra]);
   const allItems = products.filter((p) => ids.has(p.id));
   const matchSupplier = (p: Product) =>
     !supplierFilter || (supplierFilter === NONE ? !p.supplierId : p.supplierId === supplierFilter);
@@ -66,6 +67,30 @@ export default function Bestellen({ initialSupplier }: { initialSupplier: string
     setAddValue("");
   }
 
+  /** Alles wat aangevinkt is op "onderweg" zetten: één bestelling per leverancier. */
+  async function markOrdered() {
+    const bySupplier = new Map<string | null, Product[]>();
+    for (const p of chosen) bySupplier.set(p.supplierId, [...(bySupplier.get(p.supplierId) ?? []), p]);
+    setBusy(true);
+    const created: Order[] = [];
+    for (const [sid, ps] of bySupplier) {
+      const o = await placeOrder(sid, ps.map((p) => ({ productId: p.id, qty: qtyOf(p) })));
+      if (o) created.push(o);
+    }
+    setBusy(false);
+    if (!created.length) return;
+    const names = created.map((o) => (o.supplierId ? supplierMap.get(o.supplierId)?.name : null) ?? "zonder leverancier");
+    toast(`Besteld: ${chosen.length} ${chosen.length === 1 ? "product" : "producten"} (${names.join(", ")})`, "Ongedaan", () =>
+      created.forEach((o) => cancelOrder(o.id)),
+    );
+    setQty({});
+    setOff(new Set());
+    setExtra(new Set());
+  }
+
+  const today = todayISO();
+  const open = [...data.orders].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
@@ -91,8 +116,39 @@ export default function Bestellen({ initialSupplier }: { initialSupplier: string
     <div className="stack">
       <div>
         <h1 className="h1">Bestellijst</h1>
-        <p className="lead">Alles wat op of onder het minimum zit. Pas de aantallen aan en stuur de lijst door.</p>
+        <p className="lead">Alles wat op of onder het minimum zit en nog niet besteld is. Pas de aantallen aan, stuur de lijst door en tik dan op “Markeer als besteld”.</p>
       </div>
+
+      {!!open.length && (
+        <section>
+          <SectionHead title="Onderweg" count={open.length} />
+          <div className="list">
+            {open.map((o) => {
+              const sup = o.supplierId ? supplierMap.get(o.supplierId) : undefined;
+              const exp = expectedDelivery(o, sup);
+              const names = o.lines.map((l) => productMap.get(l.productId)?.name).filter(Boolean);
+              return (
+                <Row key={o.id} onOpen={() => goTab("inboeken", { orderId: o.id })}>
+                  <div className="row-main">
+                    <div className="name">{sup?.name ?? "Zonder leverancier"}</div>
+                    <div className="meta">
+                      {exp && <span className={`pill ${exp < today ? "bad" : exp === today ? "warn" : "plain"}`}>{exp === today ? "Levering vandaag" : `Levering ${fmtDate(exp)}`}</span>}
+                      <span>
+                        besteld {fmtDate(o.createdAt.slice(0, 10))}
+                        {o.createdBy ? ` door ${o.createdBy}` : ""}
+                      </span>
+                    </div>
+                    <div className="meta">{names.slice(0, 4).join(", ")}{names.length > 4 ? ` +${names.length - 4}` : ""}</div>
+                  </div>
+                  <div className="row-side">
+                    <span className="btn small">Ontvangen</span>
+                  </div>
+                </Row>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {(supplierChips.length > 0 || (supplierFilter && supplierFilter !== NONE)) && (
         <div className="chips" style={{ paddingTop: 0 }}>
@@ -232,7 +288,7 @@ export default function Bestellen({ initialSupplier }: { initialSupplier: string
             {text}
           </pre>
           <div className="actions" style={{ marginTop: 12 }}>
-            <button className="btn primary" onClick={copy}>
+            <button className="btn" onClick={copy}>
               Kopieer lijst
             </button>
             <a
@@ -252,6 +308,12 @@ export default function Bestellen({ initialSupplier }: { initialSupplier: string
               </a>
             )}
           </div>
+          <button className="btn primary block" style={{ marginTop: 12 }} onClick={markOrdered} disabled={busy}>
+            {busy ? "Bezig…" : `Markeer als besteld (${chosen.length})`}
+          </button>
+          <p className="lead" style={{ fontSize: 14 }}>
+            Besteld zet de producten op “Onderweg”, zodat niemand ze nog eens bestelt. Als de levering er is, tik je op de bestelling om ze in te boeken.
+          </p>
         </section>
       )}
       {items.length > 0 && !chosen.length && <div className="empty">Vink minstens één product aan.</div>}

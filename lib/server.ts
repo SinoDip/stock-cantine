@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ALLERGENS, AREAS, isArea } from "./stock";
 import { ConfigError } from "./supabase";
-import type { Area, Batch, BatchInput, LogAction, LogEntry, Product, ProductInput, Supplier, SupplierInput } from "./types";
+import type { Area, Batch, BatchInput, LogAction, LogEntry, Order, OrderLine, Product, ProductInput, ReceiveLine, Supplier, SupplierInput } from "./types";
 
 /* ---------- rijen uit de database → app-objecten ---------- */
 
@@ -59,10 +59,19 @@ type LogRow = {
   detail: string | null;
 };
 
+type OrderRow = {
+  id: string;
+  supplier_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  order_lines: { product_id: string; qty: number | string }[] | null;
+};
+
 export const PRODUCT_COLS = "id,name,category,unit,min,location,prep,shelf_days,supplier_id,price,allergens,areas";
 export const BATCH_COLS = "id,product_id,qty,remaining,area,received,expires,note,created_by,created_at";
 export const SUPPLIER_COLS = "id,name,contact,phone,email,customer_number,order_days,order_deadline,delivery_days,notes";
 export const LOG_COLS = "id,created_at,who,action,product_id,product_name,qty,detail";
+export const ORDER_COLS = "id,supplier_id,created_by,created_at,order_lines(product_id,qty)";
 
 function toAreas(v: unknown): Area[] {
   const list = Array.isArray(v) ? AREAS.filter((a) => v.includes(a)) : [];
@@ -113,6 +122,16 @@ export function toSupplier(r: SupplierRow): Supplier {
     orderDeadline: r.order_deadline,
     deliveryDays: (r.delivery_days ?? []).map(Number),
     notes: r.notes,
+  };
+}
+
+export function toOrder(r: OrderRow): Order {
+  return {
+    id: r.id,
+    supplierId: r.supplier_id,
+    createdBy: r.created_by,
+    createdAt: r.created_at,
+    lines: (r.order_lines ?? []).map((l) => ({ productId: l.product_id, qty: Number(l.qty) })),
   };
 }
 
@@ -249,6 +268,53 @@ export function parseBatch(body: Record<string, unknown>): BatchInput {
   };
 }
 
+function list(v: unknown, field: string): Record<string, unknown>[] {
+  if (!Array.isArray(v) || !v.length) throw new InputError(`${field} ontbreekt.`);
+  if (v.length > 300) throw new InputError("Te veel producten in één keer.");
+  return v.map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}));
+}
+
+function positive(v: unknown): number {
+  const n = optNum(v);
+  if (!n || n <= 0) throw new InputError("Vul een aantal groter dan 0 in.");
+  return n;
+}
+
+export function parseOrder(body: Record<string, unknown>): { supplierId: string | null; lines: OrderLine[] } {
+  const lines = list(body.lines, "Producten").map((l) => ({ productId: str(l.productId, "Product", 80), qty: positive(l.qty) }));
+  return { supplierId: optStr(body.supplierId, 80), lines: [...new Map(lines.map((l) => [l.productId, l])).values()] };
+}
+
+export function parseReceive(body: Record<string, unknown>): { received: string; lines: ReceiveLine[] } {
+  return {
+    received: optDate(body.received) ?? new Date().toISOString().slice(0, 10),
+    lines: list(body.lines, "Producten").map((l) => ({
+      productId: str(l.productId, "Product", 80),
+      qty: positive(l.qty),
+      area: parseArea(l.area),
+      expires: optDate(l.expires),
+    })),
+  };
+}
+
+export function parseCount(body: Record<string, unknown>): { area: Area; counts: OrderLine[] } {
+  return {
+    area: parseArea(body.area),
+    counts: list(body.counts, "Telling").map((c) => {
+      const qty = optNum(c.qty);
+      if (qty == null) throw new InputError("Vul bij elk getelde product een aantal in.");
+      return { productId: str(c.productId, "Product", 80), qty };
+    }),
+  };
+}
+
+/** Ontbreekt een tabel uit een update die nog niet uitgevoerd is? */
+export function missingTable(err: unknown): boolean {
+  const e = (err ?? {}) as { code?: string; message?: string };
+  const m = (e.message ?? "").toLowerCase();
+  return e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST200" || m.includes("could not find") || m.includes("does not exist");
+}
+
 export { optDate, optNum };
 
 /* ---------- logboek ---------- */
@@ -317,11 +383,11 @@ function explain(err: unknown): string {
   if (m.includes("fetch failed") || m.includes("enotfound") || m.includes("getaddrinfo") || m.includes("network"))
     return `Supabase is niet bereikbaar. Klopt SUPABASE_URL in Vercel (bv. https://abcdefgh.supabase.co)? Staat je Supabase-project niet op pauze?${tech}`;
   if (e.code === "42P01" || e.code === "PGRST205" || m.includes("could not find the table") || (m.includes("relation") && m.includes("does not exist")))
-    return `Een tabel ontbreekt in de database. Voer supabase/schema.sql uit in de SQL Editor van Supabase.${tech}`;
+    return `Een tabel ontbreekt in de database. Voer supabase/update-3.sql uit in de SQL Editor van Supabase (of schema.sql als je opnieuw begint).${tech}`;
   if (e.code === "42703" || e.code === "PGRST204" || m.includes("column") || m.includes("schema cache"))
     return `Een kolom ontbreekt in de database. Voer supabase/update-1.sql en supabase/update-2.sql uit in de SQL Editor van Supabase.${tech}`;
   if (e.code === "42883" || e.code === "PGRST202" || m.includes("function"))
-    return `Een databasefunctie ontbreekt. Voer supabase/update-2.sql uit in de SQL Editor van Supabase.${tech}`;
+    return `Een databasefunctie ontbreekt. Voer supabase/update-2.sql en supabase/update-3.sql uit in de SQL Editor van Supabase.${tech}`;
   return `Er ging iets mis op de server.${tech}`;
 }
 

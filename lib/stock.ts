@@ -1,4 +1,4 @@
-import type { Area, Batch, Product, Settings } from "./types";
+import type { Area, Batch, Order, Product, Settings, Supplier } from "./types";
 
 /** Vaste volgorde van de categorieën. Voeg hier gerust een categorie toe. */
 export const CATEGORIES = [
@@ -171,6 +171,18 @@ export function productInfo(p: Product, batches: Batch[], settings: Settings): P
 
 export function needsOrder(p: Product, info: ProductInfo): boolean {
   return p.min != null && info.low !== "ok";
+}
+
+/** Eerstvolgende leverdag van de leverancier na de besteldag (null als er geen leverdagen ingesteld zijn). */
+export function expectedDelivery(o: Order, s: Supplier | undefined): string | null {
+  if (!s?.deliveryDays.length) return null;
+  const ordered = localISO(new Date(o.createdAt));
+  for (let i = 1; i <= 7; i++) {
+    const d = addDays(ordered, i);
+    const [y, m, day] = d.split("-").map(Number);
+    if (s.deliveryDays.includes(isoWeekday(new Date(y, m - 1, day)))) return d;
+  }
+  return null;
 }
 
 /** Voorstel: aanvullen tot twee keer het minimum. */

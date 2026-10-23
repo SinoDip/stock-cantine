@@ -2,15 +2,17 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { useStock } from "./StockApp";
+import Ontvangen from "./Ontvangen";
 import ProductFields, { emptyForm, toInput, type ProductForm } from "./ProductFields";
 import { ExpTag, Qty, Row, SectionHead } from "./ui";
-import { AREAS, AREA_LABEL, addDays, fmtDate, fmtNum, localISO, norm, todayISO } from "@/lib/stock";
+import { AREAS, AREA_LABEL, addDays, expectedDelivery, fmtDate, fmtNum, localISO, norm, todayISO } from "@/lib/stock";
 import type { Area, Product } from "@/lib/types";
 
 const QUICK_DAYS = [1, 2, 3, 5, 7, 14];
 
-export default function Inboeken({ initialPid }: { initialPid: string | null }) {
-  const { products, productMap, suppliers, data, addBatch, saveProduct, removeBatch, toast, openProduct, area: lastArea } = useStock();
+export default function Inboeken({ initialPid, initialOrder }: { initialPid: string | null; initialOrder: string | null }) {
+  const { products, productMap, suppliers, supplierMap, data, addBatch, saveProduct, removeBatch, toast, openProduct, area: lastArea } = useStock();
+  const [orderId, setOrderId] = useState<string | null>(initialOrder);
 
   /** Kant voor de levering: vast als het product maar in één kant staat. */
   const areaFor = (p: Product | undefined, fallback: Area): Area => (p && !p.areas.includes(fallback) ? p.areas[0] : fallback);
@@ -111,6 +113,10 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
     .filter((b) => b.createdBy && localISO(new Date(b.createdAt)) === today && productMap.has(b.productId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
+  const order = orderId ? data.orders.find((o) => o.id === orderId) : undefined;
+  if (order) return <Ontvangen key={order.id} order={order} onDone={() => setOrderId(null)} />;
+  const open = [...data.orders].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
   const expHelp =
     isPrep && shelfDays
       ? `Prep blijft ${shelfDays} ${shelfDays === 1 ? "dag" : "dagen"} goed.`
@@ -126,6 +132,34 @@ export default function Inboeken({ initialPid }: { initialPid: string | null }) 
         <h1 className="h1">Inboeken</h1>
         <p className="lead">Een levering of een nieuwe prep toevoegen.</p>
       </div>
+
+      {!!open.length && (
+        <section>
+          <SectionHead title="Bestelling binnen?" count={open.length} />
+          <div className="list">
+            {open.map((o) => {
+              const sup = o.supplierId ? supplierMap.get(o.supplierId) : undefined;
+              const exp = expectedDelivery(o, sup);
+              return (
+                <Row key={o.id} onOpen={() => setOrderId(o.id)}>
+                  <div className="row-main">
+                    <div className="name">{sup?.name ?? "Zonder leverancier"}</div>
+                    <div className="meta">
+                      {exp === today && <span className="pill warn">Levering vandaag</span>}
+                      <span>
+                        {o.lines.length} {o.lines.length === 1 ? "product" : "producten"} · besteld {fmtDate(o.createdAt.slice(0, 10))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="row-side">
+                    <span className="btn small">Inboeken</span>
+                  </div>
+                </Row>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <form className="form" onSubmit={submit} noValidate>
         <div className="field">

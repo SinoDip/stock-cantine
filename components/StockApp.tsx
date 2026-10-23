@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { Area, Batch, BatchInput, Product, ProductInput, Settings, StockData, Supplier, SupplierInput } from "@/lib/types";
+import type { Area, Batch, BatchInput, Order, OrderLine, Product, ProductInput, ReceiveLine, Settings, StockData, Supplier, SupplierInput } from "@/lib/types";
 import { AREA_LABEL, byName, groupBatches, isArea, needsOrder, productInfo, todayISO, daysBetween, type ProductInfo } from "@/lib/stock";
 import { Icon, type IconName } from "./Icons";
 import Today from "./Today";
@@ -15,7 +15,7 @@ import SettingsSheet from "./SettingsSheet";
 import NamePrompt from "./NamePrompt";
 
 export type Tab = "vandaag" | "stock" | "inboeken" | "bestellen" | "meer";
-export type TabOptions = { pid?: string; supplierId?: string; view?: MeerView };
+export type TabOptions = { pid?: string; supplierId?: string; orderId?: string; view?: MeerView };
 type SheetState =
   | { kind: "product"; pid: string | null; area?: Area }
   | { kind: "supplier"; id: string | null }
@@ -31,6 +31,10 @@ type Ctx = {
   supplierMap: Map<string, Supplier>;
   /** Zonder kant: Keuken en Front samen. */
   infoOf: (p: Product, area?: Area) => ProductInfo;
+  /** Per product: hoeveel er besteld is en nog onderweg. */
+  onOrder: Map<string, { qty: number; order: Order }>;
+  /** Onder het minimum en nog niet besteld. */
+  shouldOrder: (p: Product) => boolean;
   me: string;
   setMe: (name: string) => void;
   /** De kant die dit toestel laatst koos op de stockpagina. */
@@ -54,6 +58,10 @@ type Ctx = {
   saveSupplier: (id: string | null, input: SupplierInput) => Promise<Supplier | null>;
   deleteSupplier: (id: string) => Promise<void>;
   saveSettings: (s: Settings) => Promise<boolean>;
+  placeOrder: (supplierId: string | null, lines: OrderLine[]) => Promise<Order | null>;
+  receiveOrder: (id: string, received: string, lines: ReceiveLine[]) => Promise<boolean>;
+  cancelOrder: (id: string) => Promise<boolean>;
+  saveCount: (area: Area, counts: OrderLine[]) => Promise<number | null>;
 };
 
 const StockContext = createContext<Ctx | null>(null);
@@ -64,7 +72,7 @@ export function useStock(): Ctx {
   return c;
 }
 
-const EMPTY: StockData = { products: [], batches: [], suppliers: [], settings: { warnDays: 3 } };
+const EMPTY: StockData = { products: [], batches: [], suppliers: [], orders: [], settings: { warnDays: 3 } };
 const NAME_KEY = "stocklijst.naam";
 const AREA_KEY = "stocklijst.kant";
 
@@ -198,6 +206,12 @@ export default function StockApp() {
     },
     [infoCache, byProduct, data.settings],
   );
+  const onOrder = useMemo(() => {
+    const map = new Map<string, { qty: number; order: Order }>();
+    for (const o of data.orders) for (const l of o.lines) map.set(l.productId, { qty: (map.get(l.productId)?.qty ?? 0) + l.qty, order: o });
+    return map;
+  }, [data.orders]);
+  const shouldOrder = useCallback((p: Product) => needsOrder(p, infoOf(p)) && !onOrder.has(p.id), [infoOf, onOrder]);
 
   /* ---------- toast ---------- */
   const toast = useCallback((msg: string, actionLabel?: string, action?: () => void) => {
@@ -376,6 +390,46 @@ export default function StockApp() {
     [mutate],
   );
 
+  const placeOrder = useCallback(
+    async (supplierId: string | null, lines: OrderLine[]) => {
+      const created = await mutate(null, () => api<Order>("/api/orders", "POST", { supplierId, lines }));
+      if (created) setData((d) => ({ ...d, orders: [...d.orders.filter((o) => o.id !== created.id), created] }));
+      return created;
+    },
+    [mutate],
+  );
+
+  const receiveOrder = useCallback(
+    async (id: string, received: string, lines: ReceiveLine[]) => {
+      const r = await mutate(
+        (d) => ({ ...d, orders: d.orders.filter((o) => o.id !== id) }),
+        () => api<{ batches: Batch[] }>(`/api/orders/${encodeURIComponent(id)}/receive`, "POST", { received, lines }),
+      );
+      if (r) setData((d) => ({ ...d, batches: [...d.batches.filter((b) => !r.batches.some((x) => x.id === b.id)), ...r.batches] }));
+      return !!r;
+    },
+    [mutate],
+  );
+
+  const cancelOrder = useCallback(
+    async (id: string) => {
+      const r = await mutate(
+        (d) => ({ ...d, orders: d.orders.filter((o) => o.id !== id) }),
+        () => api(`/api/orders/${encodeURIComponent(id)}`, "DELETE"),
+      );
+      return !!r;
+    },
+    [mutate],
+  );
+
+  const saveCount = useCallback(
+    async (area: Area, counts: OrderLine[]) => {
+      const r = await mutate(null, () => api<{ changed: number }>("/api/count", "POST", { area, counts }));
+      return r ? r.changed : null;
+    },
+    [mutate],
+  );
+
   /* ---------- navigatie ---------- */
   const goTab = useCallback((t: Tab, opts: TabOptions = {}) => {
     setTab(t);
@@ -395,6 +449,8 @@ export default function StockApp() {
     suppliers,
     supplierMap,
     infoOf,
+    onOrder,
+    shouldOrder,
     me,
     setMe,
     area,
@@ -417,6 +473,10 @@ export default function StockApp() {
     saveSupplier,
     deleteSupplier,
     saveSettings,
+    placeOrder,
+    receiveOrder,
+    cancelOrder,
+    saveCount,
   };
 
   /* ---------- tellers op de tabs ---------- */
@@ -424,7 +484,7 @@ export default function StockApp() {
   const attention = data.batches.filter(
     (b) => b.remaining > 0 && b.expires && productMap.has(b.productId) && daysBetween(today, b.expires) <= data.settings.warnDays,
   ).length;
-  const toOrder = products.filter((p) => needsOrder(p, infoOf(p))).length;
+  const toOrder = products.filter(shouldOrder).length;
 
   const tabs: { id: Tab; label: string; icon: IconName; count?: number }[] = [
     { id: "vandaag", label: "Vandaag", icon: "clock", count: attention },
@@ -484,7 +544,7 @@ export default function StockApp() {
         ) : tab === "stock" ? (
           <StockList />
         ) : tab === "inboeken" ? (
-          <Inboeken key={tabKey} initialPid={tabOpts.pid ?? null} />
+          <Inboeken key={tabKey} initialPid={tabOpts.pid ?? null} initialOrder={tabOpts.orderId ?? null} />
         ) : tab === "bestellen" ? (
           <Bestellen key={tabKey} initialSupplier={tabOpts.supplierId ?? null} />
         ) : (

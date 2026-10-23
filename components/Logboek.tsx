@@ -20,6 +20,10 @@ const LABELS: Record<LogAction, string> = {
   supplier_edit: "paste leverancier aan:",
   supplier_delete: "verwijderde leverancier:",
   settings: "wijzigde instellingen:",
+  order: "bestelde bij",
+  order_receive: "boekte bestelling in van",
+  order_cancel: "annuleerde bestelling bij",
+  count: "telde",
 };
 
 const FILTERS: { id: string; label: string; actions: LogAction[] | null }[] = [
@@ -27,6 +31,8 @@ const FILTERS: { id: string; label: string; actions: LogAction[] | null }[] = [
   { id: "gebruik", label: "Gebruikt", actions: ["use"] },
   { id: "in", label: "Ingeboekt", actions: ["add"] },
   { id: "weg", label: "Weggegooid", actions: ["discard"] },
+  { id: "best", label: "Bestellingen", actions: ["order", "order_receive", "order_cancel"] },
+  { id: "tel", label: "Telling", actions: ["count"] },
   {
     id: "wijz",
     label: "Wijzigingen",

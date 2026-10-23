@@ -47,6 +47,20 @@ export type Supplier = {
   notes: string | null;
 };
 
+export type OrderLine = { productId: string; qty: number };
+
+/** Een bestelling die nog onderweg is. */
+export type Order = {
+  id: string;
+  supplierId: string | null;
+  createdBy: string | null;
+  createdAt: string; // ISO
+  lines: OrderLine[];
+};
+
+/** Eén product uit een bestelling dat binnenkomt. */
+export type ReceiveLine = { productId: string; qty: number; area: Area; expires: string | null };
+
 export type LogEntry = {
   id: number;
   createdAt: string;
@@ -72,7 +86,11 @@ export type LogAction =
   | "supplier_add"
   | "supplier_edit"
   | "supplier_delete"
-  | "settings";
+  | "settings"
+  | "order"
+  | "order_receive"
+  | "order_cancel"
+  | "count";
 
 export type Settings = { warnDays: number };
 
@@ -80,6 +98,8 @@ export type StockData = {
   products: Product[];
   batches: Batch[];
   suppliers: Supplier[];
+  /** Bestellingen die nog onderweg zijn. */
+  orders: Order[];
   settings: Settings;
 };
 

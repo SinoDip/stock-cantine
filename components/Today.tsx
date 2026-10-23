@@ -2,17 +2,21 @@
 
 import { useStock } from "./StockApp";
 import { ExpTag, MinusButton, Qty, Row, SectionHead } from "./ui";
-import { AREA_LABEL, daysBetween, fifo, fmtDate, fmtDuration, fmtNum, isoWeekday, longDate, minutesUntil, needsOrder, todayISO } from "@/lib/stock";
+import { AREA_LABEL, daysBetween, expectedDelivery, fifo, fmtDate, fmtDuration, fmtNum, isoWeekday, longDate, minutesUntil, todayISO } from "@/lib/stock";
 import type { Batch } from "@/lib/types";
 
 export default function Today() {
-  const { data, products, productMap, suppliers, infoOf, openProduct, consumeBatch, discard, goTab } = useToday();
+  const { data, products, productMap, suppliers, supplierMap, infoOf, shouldOrder, openProduct, consumeBatch, discard, goTab } = useToday();
   const w = data.settings.warnDays;
   const t = todayISO();
   const all = data.batches.filter((b) => b.remaining > 0 && productMap.has(b.productId));
   const expired = all.filter((b) => b.expires && b.expires < t).sort(fifo);
   const soon = all.filter((b) => b.expires && b.expires >= t && daysBetween(t, b.expires) <= w).sort(fifo);
-  const low = products.filter((p) => needsOrder(p, infoOf(p)));
+  const low = products.filter(shouldOrder);
+  const arriving = data.orders
+    .map((o) => ({ o, s: o.supplierId ? supplierMap.get(o.supplierId) : undefined }))
+    .map((x) => ({ ...x, exp: expectedDelivery(x.o, x.s) }))
+    .filter((x) => x.exp && x.exp <= t);
   const prepNoDate = all.filter((b) => productMap.get(b.productId)?.prep && !b.expires);
   const weekday = isoWeekday();
   const orderToday = suppliers
@@ -106,6 +110,30 @@ export default function Today() {
                 </div>
                 <div className="row-side">
                   <span className="btn small">Bestellijst</span>
+                </div>
+              </Row>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!!arriving.length && (
+        <section id="s-arriving">
+          <SectionHead title="Levering verwacht" count={arriving.length} />
+          <div className="list">
+            {arriving.map(({ o, s, exp }) => (
+              <Row key={o.id} onOpen={() => goTab("inboeken", { orderId: o.id })}>
+                <div className="row-main">
+                  <div className="name">{s?.name ?? "Zonder leverancier"}</div>
+                  <div className="meta">
+                    {exp! < t && <span className="pill bad">Verwacht {fmtDate(exp)}</span>}
+                    <span>
+                      {o.lines.length} {o.lines.length === 1 ? "product" : "producten"} besteld
+                    </span>
+                  </div>
+                </div>
+                <div className="row-side">
+                  <span className="btn small">Inboeken</span>
                 </div>
               </Row>
             ))}

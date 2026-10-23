@@ -6,14 +6,20 @@ import { daysBetween, fmtDate, fmtNum, relDays, todayISO } from "@/lib/stock";
 import { Icon } from "./Icons";
 
 /** Vervaldatum op een "tape"-label, met een waarschuwing als het dringend is. */
-export function ExpTag({ b, warnDays }: { b: Batch; warnDays: number }) {
+/** `part`: hoeveel er op die datum vervalt, als dat niet alles is (bv. "2 van 5"). */
+export function ExpTag({ b, warnDays, part }: { b: Batch; warnDays: number; part?: string }) {
   if (!b.expires) return null;
   const d = daysBetween(todayISO(), b.expires);
   const cls = d < 0 ? "bad" : d <= warnDays ? "warn" : null;
   return (
     <>
       <span className="tape">{fmtDate(b.expires)}</span>
-      {cls && <span className={`pill ${cls}`}>{relDays(d)}</span>}
+      {cls && (
+        <span className={`pill ${cls}`}>
+          {part ? `${part}: ` : ""}
+          {relDays(d)}
+        </span>
+      )}
     </>
   );
 }

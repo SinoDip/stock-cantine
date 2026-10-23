@@ -5,8 +5,8 @@ Een eenvoudige stock-app voor de keuken. Het hele team logt in met één gedeeld
 - **Vandaag:** wat vervalt, wat eerst op moet, wat je moet bijbestellen en bij welke leverancier je vandaag nog moet bestellen (met deadline).
 - **Stock:** zoeken, −1 tikken, stockwaarde in euro.
 - **Inboeken:** leveringen en prep, met automatische vervaldatum voor prep.
-- **Bestellen:** bestellijst per leverancier, geschat bedrag, doorsturen via WhatsApp, mail of kopiëren.
-- **Meer:** leveranciers (contact, besteldagen, deadline, leverdagen), allergenen (de 14 EU-allergenen per product), logboek (wie deed wat en wanneer) en instellingen.
+- **Bestellen:** bestellijst per leverancier, geschat bedrag, doorsturen via WhatsApp, mail of kopiëren. Markeer als besteld, zodat niemand dubbel bestelt; bij levering boek je de hele bestelling in één keer in.
+- **Meer:** stock tellen per kant, leveranciers (contact, besteldagen, deadline, leverdagen), allergenen (de 14 EU-allergenen per product), logboek (wie deed wat en wanneer) en instellingen.
 
 - **Next.js 15** (App Router, React 19, TypeScript)
 - **Supabase** (Postgres) als database
@@ -31,6 +31,8 @@ De stock van 12 oktober 2026 (uit de Google Sheet) zit al in `supabase/seed.sql`
 > **Had je `schema.sql` al uitgevoerd vóór de leveranciers, allergenen en het logboek erbij kwamen?** Voer dan alleen `supabase/update-1.sql` uit (SQL Editor → New query → Run). Je stock blijft gewoon staan.
 
 > **Had je de app al vóór Keuken en Front er waren?** Voer dan ook `supabase/update-2.sql` één keer uit, *vóór* je de nieuwe versie deployt. Producten met locatie "Bar" gaan naar Front, al de rest naar Keuken. Je stock blijft staan.
+
+> **Had je de app al vóór bestellingen en tellen er waren?** Voer dan ook `supabase/update-3.sql` één keer uit. Je stock blijft staan.
 
 Nu heb je twee waarden nodig voor stap 3:
 

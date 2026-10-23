@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useStock } from "./StockApp";
 import { ConfirmButton, Qty, Row, SectionHead, Sheet } from "./ui";
 import { Icon } from "./Icons";
-import { WEEKDAYS, fmtDays, needsOrder, norm } from "@/lib/stock";
+import { WEEKDAYS, fmtDays, norm } from "@/lib/stock";
 import type { Supplier, SupplierInput } from "@/lib/types";
 
 type Form = {
@@ -70,7 +70,7 @@ function DayPicker({ value, onChange, label }: { value: number[]; onChange: (v: 
 }
 
 export default function SupplierSheet({ id }: { id: string | null }) {
-  const { supplierMap, suppliers, products, infoOf, closeSheet, saveSupplier, deleteSupplier, toast, openProduct, goTab } = useStock();
+  const { supplierMap, suppliers, products, infoOf, shouldOrder, closeSheet, saveSupplier, deleteSupplier, toast, openProduct, goTab } = useStock();
   const s = id ? supplierMap.get(id) : undefined;
   const [form, setForm] = useState<Form>(formFrom(s));
   const [editOpen, setEditOpen] = useState(!s);
@@ -189,7 +189,7 @@ export default function SupplierSheet({ id }: { id: string | null }) {
   }
 
   const linked = products.filter((p) => p.supplierId === s.id);
-  const low = linked.filter((p) => needsOrder(p, infoOf(p)));
+  const low = linked.filter(shouldOrder);
   const sub = [
     s.contact,
     s.customerNumber ? `klantnr. ${s.customerNumber}` : null,

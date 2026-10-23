@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useStock } from "./StockApp";
 import { ExpTag, MinusButton, Qty, Row } from "./ui";
 import { Icon } from "./Icons";
-import { AREAS, AREA_LABEL, byCategory, fmtMoney, needsOrder, norm } from "@/lib/stock";
+import { AREAS, AREA_LABEL, byCategory, fmtMoney, fmtNum, needsOrder, norm } from "@/lib/stock";
 import type { Product } from "@/lib/types";
 
 export default function StockList() {
-  const { products: allProducts, infoOf, data, consumeOne, openProduct, area, setArea } = useStock();
+  const { products: allProducts, infoOf, onOrder, data, consumeOne, openProduct, area, setArea } = useStock();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("Alles");
 
@@ -102,15 +102,18 @@ export default function StockList() {
               {groups.get(c)!.map((p) => {
                 const i = infoOf(p, area);
                 const toOrder = needsOrder(p, infoOf(p));
+                const nextQty = i.next ? i.batches.filter((b) => b.expires === i.next!.expires).reduce((s, b) => s + b.remaining, 0) : 0;
+                const part = nextQty < i.total ? `${fmtNum(nextQty)} van ${fmtNum(i.total)}` : undefined;
                 return (
                   <Row key={p.id} onOpen={() => openProduct(p.id)}>
                     <div className="row-main">
                       <div className="name">{p.name}</div>
-                      {(i.next || i.low === "op" || toOrder || p.prep || p.location) && (
+                      {(i.next || i.low === "op" || toOrder || onOrder.has(p.id) || p.prep || p.location) && (
                         <div className="meta">
-                          {i.next && <ExpTag b={i.next} warnDays={data.settings.warnDays} />}
+                          {i.next && <ExpTag b={i.next} warnDays={data.settings.warnDays} part={part} />}
                           {i.low === "op" && <span className="pill bad">Op</span>}
-                          {i.low !== "op" && toOrder && <span className="pill low">Bijbestellen</span>}
+                          {i.low !== "op" && toOrder && !onOrder.has(p.id) && <span className="pill low">Bijbestellen</span>}
+                          {onOrder.has(p.id) && <span className="pill good">Besteld</span>}
                           {p.prep && <span className="pill plain">Prep</span>}
                           {p.location && <span>{p.location}</span>}
                         </div>

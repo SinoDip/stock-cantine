@@ -6,8 +6,9 @@ import { Icon, type IconName } from "./Icons";
 import Suppliers from "./Suppliers";
 import Allergens from "./Allergens";
 import Logboek from "./Logboek";
+import Telling from "./Telling";
 
-export type MeerView = "menu" | "leveranciers" | "allergenen" | "logboek";
+export type MeerView = "menu" | "leveranciers" | "allergenen" | "logboek" | "telling";
 
 export default function Meer({ initialView }: { initialView: MeerView }) {
   const { suppliers, products, openSettings } = useStock();
@@ -23,9 +24,11 @@ export default function Meer({ initialView }: { initialView: MeerView }) {
   if (view === "leveranciers") return <div>{back}<Suppliers /></div>;
   if (view === "allergenen") return <div>{back}<Allergens /></div>;
   if (view === "logboek") return <div>{back}<Logboek /></div>;
+  if (view === "telling") return <div>{back}<Telling /></div>;
 
   const withAllergens = products.filter((p) => p.allergens.length).length;
   const items: { id: MeerView | "instellingen"; icon: IconName; title: string; sub: string }[] = [
+    { id: "telling", icon: "box", title: "Stock tellen", sub: "Per kant tellen wat er echt staat en de stock bijwerken" },
     {
       id: "leveranciers",
       icon: "truck",
