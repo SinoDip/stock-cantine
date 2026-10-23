@@ -7,3 +7,6 @@ out
 .vercel
 *.tsbuildinfo
 .DS_Store
+
+# Bevat webshop-logins van leveranciers
+supabase/leveranciers.sql
